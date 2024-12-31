@@ -1,12 +1,14 @@
 ## About the app
 
-This is a React native App for tracking your weekly goals.
-Compatible for android, ios and web.
+## This is a React native App for tracking your weekly goals.
 
-Features:
--add and delete goals (Can only be changed on sundays)
--timeline with progressbar
--random congrats messages when all goals finished during the week
+### Compatible for android, ios and web.
+
+### Features:
+
+- add and delete goals (Can only be changed on sundays)
+- timeline with progressbar
+- random congrats messages when all goals finished during the week
 
 ## Step 1: Start the Metro Server
 
