@@ -22,6 +22,9 @@ interface Goal {
 }
 
 const App = () => {
+  const [isDataInitialized, setIsDataInitialized] = useState(false);
+  const [isResetAlreadyRunThisWeek, setIsResetAlreadyRunThisWeek] =
+    useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalCount, setNewGoalCount] = useState('');
@@ -37,6 +40,7 @@ const App = () => {
 
   useEffect(() => {
     initData();
+    setIsDataInitialized(true);
   }, []);
 
   useEffect(() => {
@@ -48,18 +52,30 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    if (isDataInitialized) {
     checkIfAllGoalsCompleted();
     saveGoals();
+    }
   }, [goals]);
 
   useEffect(() => {
+    if (isDataInitialized) {
     saveWinningStreak();
+    }
   }, [winningStreak]);
+
+  useEffect(() => {
+    if (isDataInitialized) {
+      saveAllGoalsCompletedFlag();
+    }
+  }, [allGoalsCompletedFlag]);
+
 
   const initData = async () => {
     const data = await loadData();
     setGoals(data?.storedGoals);
     setWinningStreak(data?.winningStreak);
+    setAllGoalsCompletedFlag(Boolean(data?.allGoalsCompletedFlag));
   };
 
   const loadData = async () => {
@@ -77,20 +93,35 @@ const App = () => {
           'winningStreak',
           JSON.stringify(defaultWinningStreak),
         );
+        await AsyncStorage.setItem(
+          'allGoalsCompletedFlag',
+          JSON.stringify(defaultAllGoalsCompletedFlag),
+        );
 
         return {
           storedGoals: defaultGoals,
           winningStreak: defaultWinningStreak,
+          allGoalsCompletedFlag: defaultAllGoalsCompletedFlag,
         };
       }
 
-      if (storedGoals && storedWinningStreak) {
-        console.log('Daten erfolgreich geladen:', storedGoals);
+      if (storedGoals && storedWinningStreak && storedAllGoalsCompletedFlag) {
+        console.log(
+          'Daten erfolgreich geladen:',
+          storedGoals,
+          storedWinningStreak,
+          storedAllGoalsCompletedFlag,
+        );
         const storedGoalsUnparsed = JSON.parse(storedGoals);
         const storedWinningStreakUnparsed = JSON.parse(storedWinningStreak);
+        const storedAllGoalsCompletedFlagUnparsed = JSON.parse(
+          storedAllGoalsCompletedFlag,
+        );
+
         return {
           storedGoals: storedGoalsUnparsed,
           winningStreak: storedWinningStreakUnparsed,
+          allGoalsCompletedFlag: storedAllGoalsCompletedFlagUnparsed,
         };
       }
     } catch (error) {
@@ -122,9 +153,39 @@ const App = () => {
     }
   };
 
+  const saveAllGoalsCompletedFlag = async () => {
+    try {
+      await AsyncStorage.setItem(
+        'allGoalsCompletedFlag',
+        JSON.stringify(allGoalsCompletedFlag),
+      );
+      console.log('Speichere allGoalsCompletedFlag: ', allGoalsCompletedFlag);
+    } catch (error) {
+      console.error(
+        'Fehler beim Speichern der allGoalsCompletedFlag in AsyncStorage: ',
+        error,
+      );
+    }
+  };
+
+  const saveAllGoalsCompletedFlag = async () => {
+    try {
+      await AsyncStorage.setItem(
+        'allGoalsCompletedFlag',
+        JSON.stringify(allGoalsCompletedFlag),
+      );
+      console.log('Speichere allGoalsCompletedFlag: ', allGoalsCompletedFlag);
+    } catch (error) {
+      console.error(
+        'Fehler beim Speichern der allGoalsCompletedFlag in AsyncStorage: ',
+        error,
+      );
+    }
+  };
+
   const addGoal = (): void => {
-    const goalCount = Number(newGoalCount);
-    if (newGoalTitle.trim() !== '' && goalCount > 0) {
+    const goalCount = Math.floor(Number(newGoalCount));
+    if (newGoalTitle.trim() !== '' && goalCount >= 1) {
       const newGoal: Goal = {
         id: Math.random(),
         title: newGoalTitle,
@@ -166,12 +227,11 @@ const App = () => {
   };
 
   const checkDateConditions = (): void => {
-    calculateRemainingTimeTextAndProgressBar();
     const now = new Date();
     const currentDay = now.getDay();
     const currentHour = now.getHours();
 
-    if (currentDay === 1 && currentHour === 0) {
+    if (currentDay === 1 && currentHour === 0 && !isResetAlreadyRunThisWeek) {
       if (!allGoalsCompletedFlag) {
         setWinningStreak(0);
       }
@@ -182,13 +242,17 @@ const App = () => {
       }));
       setGoals(resetGoalsCount);
       setAllGoalsCompletedFlag(false);
+      setIsResetAlreadyRunThisWeek(true);
     }
 
     if (currentDay === 0) {
       setDeactivateActionButtons(true);
+      setIsResetAlreadyRunThisWeek(false);
     } else {
       setDeactivateActionButtons(false);
     }
+
+    calculateRemainingTimeTextAndProgressBar();
   };
 
   const calculateRemainingTimeTextAndProgressBar = (): void => {
@@ -212,10 +276,13 @@ const App = () => {
       (remainingMilliseconds % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
     const hourStringText = remainingHours === 1 ? 'Stunde' : 'Stunden';
+    const weekAlreadyCompleted = allGoalsCompletedFlag
+      ? 'entspannt zurücklehen!'
+      : 'fast geschafft';
     const timeText =
       remainingDays > 0
         ? `${remainingDays} Tage, ${remainingHours} ${hourStringText}`
-        : 'fast geschafft';
+        : `${weekAlreadyCompleted}`;
     setTimeLeft(timeText);
 
     //Progressbar
@@ -227,7 +294,9 @@ const App = () => {
 
   const checkIfAllGoalsCompleted = (): void => {
     const allCompleted = goals.every(goal => goal.finished);
+    console.log('checkIfAllGoalsCompleted', allGoalsCompletedFlag);
     if (allCompleted && goals.length > 0 && !allGoalsCompletedFlag) {
+      console.log('kommt echt in die Bedingung rein komischerweise');
       setWinningStreak(winningStreak + 1);
       setAllGoalsCompletedFlag(true);
       setShowConfetti(true);
@@ -347,12 +416,14 @@ const App = () => {
             <TextInput
               style={styles.input}
               placeholder="Ziel"
+              placeholderTextColor="black"
               value={newGoalTitle}
               onChangeText={setNewGoalTitle}
             />
             <TextInput
               style={styles.input}
               placeholder="Anzahl"
+              placeholderTextColor="black"
               value={newGoalCount}
               onChangeText={setNewGoalCount}
               keyboardType="numeric"
@@ -373,7 +444,17 @@ const App = () => {
 
       {/* Winning Streak */}
       <Text style={styles.winningStreakText}>
-        Winning streak: {winningStreak}
+        Winning streak:{' '}
+        <Text style={styles.winningStreakCount}>{winningStreak} </Text>
+        {winningStreak > 9 ? (
+          <Text>🚀</Text>
+        ) : winningStreak > 4 ? (
+          <Text>😲</Text>
+        ) : winningStreak > 1 ? (
+          <Text>✨</Text>
+        ) : (
+          <Text />
+        )}
       </Text>
 
       {/* Forschrittstext */}
@@ -408,12 +489,16 @@ const styles = StyleSheet.create({
     color: '#2F4F4F',
   },
   actionButtonsDeactivatedText: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#777',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
+
   confetti: {
     position: 'absolute',
     inset: 0,
-    zIndex: 9999,
+    zIndex: 9,
   },
   input: {
     height: 40,
@@ -424,6 +509,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#fff',
   },
+
   goalContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -491,24 +577,35 @@ const styles = StyleSheet.create({
     top: '50%',
     left: '50%',
     transform: [{translateX: -150}, {translateY: -50}],
-    width: 300,
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '80%',
+    paddingHorizontal: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderRadius: 10,
-    padding: 20,
     zIndex: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 15,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    textAlign: 'center',
   },
   congratsText: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#fff',
     textAlign: 'center',
+    flexWrap: 'wrap',
+    lineHeight: 22,
+    paddingHorizontal: 10,
+    flexShrink: 1,
+    flexGrow: 1,
   },
   winningStreakText: {
     fontSize: 16,
     marginBottom: 8,
     fontWeight: 'bold',
+  },
+  winningStreakCount: {
+    color: '#6200ee',
   },
   progressText: {
     fontSize: 16,
