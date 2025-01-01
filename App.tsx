@@ -238,13 +238,18 @@ const App = () => {
     }
   };
 
-  const CongratsMessage = () => {
+  const getRandomCongratsMessage = (): string => {
     const messages = [
-      'Super! Du hast deine Wochenziele erreicht!',
-      'Nicht schlecht, wieder geschafft',
-      'Toll gemacht! Deine Wochenziele sind erreicht!',
-      'Fantastisch! Du hast deine Ziele für diese Woche erfüllt!',
-      `Herzlichen Glückwunsch Meister, schon zum ${winningStreak}x`,
+      `Wahnsinn! Zum ${winningStreak}. Mal alles abgeräumt - deine To-Do-Liste hat wahrscheinlich Angst vor dir.`,
+      `Schon ${winningStreak} Wochen in Serie - ich hoffe, du hast dir eine gute Ausrede parat, falls du irgendwann mal nicht lieferst.`,
+      `Wow, zum ${winningStreak}. Mal! Es wirkt fast so, als wäre Versagen für dich nur eine literarische Erfindung.`,
+      `Der ${winningStreak}. Erfolg in Folge. So konstant bist du wahrscheinlich nicht mal beim Spülen.`,
+      `Zum ${winningStreak}. Mal? Die Wahrscheinlichkeit, dass du scheiterst, ist inzwischen rein theoretisch.`,
+      `Der ${winningStreak}. Erfolg in Serie - ein guter Grund, heute mal stolz auf dich zu sein.`,
+      `Schon ${winningStreak} Wochen in Folge. Es zeigt, wie kleine Schritte eine große Reise prägen können.`,
+      `Der ${winningStreak}. Erfolg in Serie - die Gesetze der Wahrscheinlichkeit wollen dich offenbar nicht kennen.`,
+      `Der ${winningStreak}. Erfolg hintereinander - das Gefühl, seine eigenen Versprechen einzuhalten, ist unbezahlbar.`,
+      `Zum ${winningStreak}. Mal alles erledigt: Es ist nicht nur ein Sieg über die Aufgaben, sondern auch über die Zweifel in dir.`,
     ];
 
     const randomMessage = messages[Math.floor(Math.random() * messages.length)];
