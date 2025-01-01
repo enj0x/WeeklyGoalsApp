@@ -25,7 +25,7 @@ const App = () => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalCount, setNewGoalCount] = useState('');
-  const [allGoalsCompleted, setAllGoalsCompleted] = useState(false);
+  const [allGoalsCompletedFlag, setAllGoalsCompletedFlag] = useState(false);
   const [showActionButton, setShowActionButton] = useState(false);
   const [deactivateActionButtons, setDeactivateActionButtons] = useState(true);
   const [winningStreak, setWinningStreak] = useState<number>(0);
@@ -94,7 +94,7 @@ const App = () => {
         };
       }
     } catch (error) {
-      console.error('Fehler beim Laden der Ziele aus AsyncStorage:', error);
+      console.error('Fehler beim Laden der Ziele aus AsyncStorage: ', error);
     }
   };
 
@@ -103,7 +103,7 @@ const App = () => {
       await AsyncStorage.setItem('goals', JSON.stringify(goals));
       console.log('Speichere Ziele:', goals);
     } catch (error) {
-      console.error('Fehler beim Speichern der Ziele in AsyncStorage:', error);
+      console.error('Fehler beim Speichern der Ziele in AsyncStorage: ', error);
     }
   };
 
@@ -113,22 +113,23 @@ const App = () => {
         'winningStreak',
         JSON.stringify(winningStreak),
       );
-      console.log('Speichere winningStreak:', winningStreak);
+      console.log('Speichere winningStreak: ', winningStreak);
     } catch (error) {
       console.error(
-        'Fehler beim Speichern der winningStreak in AsyncStorage:',
+        'Fehler beim Speichern der winningStreak in AsyncStorage: ',
         error,
       );
     }
   };
 
-  const addGoal = () => {
-    if (newGoalTitle.trim() !== '' && !isNaN(parseInt(newGoalCount))) {
+  const addGoal = (): void => {
+    const goalCount = Number(newGoalCount);
+    if (newGoalTitle.trim() !== '' && goalCount > 0) {
       const newGoal: Goal = {
         id: Math.random(),
         title: newGoalTitle,
-        count: parseInt(newGoalCount),
-        originalCount: parseInt(newGoalCount),
+        count: goalCount,
+        originalCount: goalCount,
         finished: false,
       };
       setGoals(prevGoals => {
@@ -145,16 +146,6 @@ const App = () => {
       const updatedGoals = prevGoals.filter(goal => goal.id !== id);
       return updatedGoals;
     });
-  };
-
-  const resetGoals = () => {
-    const resetGoals = goals.map(goal => ({
-      ...goal,
-      count: goal.originalCount,
-      finished: false,
-    }));
-    setGoals(resetGoals);
-    setAllGoalsCompleted(false);
   };
 
   const decreaseCount = (id: number) => {
@@ -174,16 +165,25 @@ const App = () => {
     });
   };
 
-  const checkDateConditions = () => {
+  const checkDateConditions = (): void => {
     calculateRemainingTimeTextAndProgressBar();
     const now = new Date();
     const currentDay = now.getDay();
     const currentHour = now.getHours();
 
-    //reset Goals and Deactivate Actionbuttons
     if (currentDay === 1 && currentHour === 0) {
-      resetGoals();
+      if (!allGoalsCompletedFlag) {
+        setWinningStreak(0);
+      }
+      const resetGoalsCount = goals.map(goal => ({
+        ...goal,
+        count: goal.originalCount,
+        finished: false,
+      }));
+      setGoals(resetGoalsCount);
+      setAllGoalsCompletedFlag(false);
     }
+
     if (currentDay === 0) {
       setDeactivateActionButtons(true);
     } else {
@@ -191,7 +191,7 @@ const App = () => {
     }
   };
 
-  const calculateRemainingTimeTextAndProgressBar = () => {
+  const calculateRemainingTimeTextAndProgressBar = (): void => {
     //Condition for Mondays
     const now = new Date();
     const currentDay = now.getDay();
@@ -225,20 +225,27 @@ const App = () => {
     setProgress(progressValue);
   };
 
-  const checkIfAllGoalsCompleted = () => {
+  const checkIfAllGoalsCompleted = (): void => {
     const allCompleted = goals.every(goal => goal.finished);
-    //AllGoalsCompleted umbenennen
-    if (allCompleted && goals.length > 0 && !allGoalsCompleted) {
+    if (allCompleted && goals.length > 0 && !allGoalsCompletedFlag) {
       setWinningStreak(winningStreak + 1);
-      setAllGoalsCompleted(true);
+      setAllGoalsCompletedFlag(true);
       setShowConfetti(true);
       setTimeout(() => {
         setShowConfetti(false);
-      }, 5000);
+      }, 7000);
     }
   };
 
   const getRandomCongratsMessage = (): string => {
+    if (winningStreak === 1) {
+      return 'Du hast das erste mal offiziell deine Wochenziele geschafft, weiter so!';
+    }
+
+    if (winningStreak === 2) {
+      return 'Zwei Mal hintereinander? Du bist auf dem richtigen Weg!';
+    }
+
     const messages = [
       `Wahnsinn! Zum ${winningStreak}. Mal alles abgeräumt - deine To-Do-Liste hat wahrscheinlich Angst vor dir.`,
       `Schon ${winningStreak} Wochen in Serie - ich hoffe, du hast dir eine gute Ausrede parat, falls du irgendwann mal nicht lieferst.`,
@@ -301,26 +308,20 @@ const App = () => {
     <View style={styles.container}>
       {/* Überschrift */}
       <Text style={styles.heading}>
-        <Animated.Text
-          style={{fontSize: 32, color: '#2F4F4F', fontWeight: 'bold'}}>
+        <Animated.Text style={styles.headingText}>
           Weekly Goals 🎯
         </Animated.Text>
       </Text>
 
       {/* Konfetti Animation */}
       {showConfetti && (
-        <View
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 9999,
-          }}>
+        <View style={styles.confetti}>
           <ConfettiCannon count={200} origin={{x: width / 2, y: height / 2}} />
         </View>
       )}
       {showConfetti && (
         <Animated.View style={styles.fadeText}>
-          <Text style={styles.congratsText}>{CongratsMessage()}</Text>
+          <Text style={styles.congratsText}>{getRandomCongratsMessage()}</Text>
         </Animated.View>
       )}
 
@@ -334,7 +335,9 @@ const App = () => {
           />
         </>
       ) : (
-        <Text>Änderungen der Ziele nur Sonntags möglich.</Text>
+        <Text style={styles.actionButtonsDeactivatedText}>
+          Änderungen der Ziele nur Sonntags möglich.
+        </Text>
       )}
 
       {/* Eingabefelder für Hinzufügen */}
@@ -358,7 +361,7 @@ const App = () => {
           </View>
         </>
       ) : (
-        <Text></Text>
+        <Text />
       )}
 
       {/* Zielliste */}
@@ -369,10 +372,14 @@ const App = () => {
       />
 
       {/* Winning Streak */}
-      <Text style={styles.text}>Winning streak: {winningStreak}</Text>
+      <Text style={styles.winningStreakText}>
+        Winning streak: {winningStreak}
+      </Text>
 
       {/* Forschrittstext */}
-      <Text style={styles.text}>Verbleibende Zeit bis zum Ende der Woche:</Text>
+      <Text style={styles.progressText}>
+        Verbleibende Zeit bis zum Ende der Woche:
+      </Text>
       <Text style={styles.timeText}>{timeLeft}</Text>
 
       {/* Fortschrittsbalken */}
@@ -390,10 +397,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   heading: {
-    fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 20,
+  },
+  headingText: {
+    textAlign: 'center',
+    marginBottom: 20,
+    fontSize: 40,
+    color: '#2F4F4F',
+  },
+  actionButtonsDeactivatedText: {
+    fontSize: 16,
+  },
+  confetti: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 9999,
   },
   input: {
     height: 40,
@@ -485,7 +505,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
-  text: {
+  winningStreakText: {
+    fontSize: 16,
+    marginBottom: 8,
+    fontWeight: 'bold',
+  },
+  progressText: {
     fontSize: 16,
     marginBottom: 8,
   },
