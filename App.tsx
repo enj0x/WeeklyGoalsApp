@@ -9,9 +9,17 @@ import {
   TextInput,
   Button,
 } from 'react-native';
-import {useWindowDimensions} from 'react-native';
+import {useWindowDimensions, ActivityIndicator} from 'react-native';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {DateTime} from 'luxon';
+
+interface AppState {
+  goals: Goal[];
+  winningStreak: number;
+  allGoalsCompletedFlag: boolean;
+  lastResetTimeStamp: number;
+}
 
 interface Goal {
   id: number;
@@ -22,9 +30,6 @@ interface Goal {
 }
 
 const App = () => {
-  const [isDataInitialized, setIsDataInitialized] = useState(false);
-  const [isResetAlreadyRunThisWeek, setIsResetAlreadyRunThisWeek] =
-    useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalCount, setNewGoalCount] = useState('');
@@ -32,154 +37,130 @@ const App = () => {
   const [showActionButton, setShowActionButton] = useState(false);
   const [deactivateActionButtons, setDeactivateActionButtons] = useState(true);
   const [winningStreak, setWinningStreak] = useState<number>(0);
+  const [isDataInitialized, setIsDataInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastResetTimeStamp, setLastResetTimeStamp] = useState<DateTime>(
+    DateTime.now(),
+  );
   const [progress, setProgress] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [showConfetti, setShowConfetti] = useState(false);
   const [animationValue] = useState(new Animated.Value(0));
   const {width, height} = useWindowDimensions();
 
+  const PERSISTANT_KEYS = [
+    'goals',
+    'winningStreak',
+    'allGoalsCompletedFlag',
+    'lastResetTimeStamp',
+  ];
+
   useEffect(() => {
+    const initData = async () => {
+      const data = await loadData();
+      console.log('init data', data);
+      setGoals(data.goals);
+      setWinningStreak(data.winningStreak);
+      setAllGoalsCompletedFlag(data.allGoalsCompletedFlag);
+      setLastResetTimeStamp(DateTime.fromMillis(data.lastResetTimeStamp));
+      setIsDataInitialized(true);
+    };
     initData();
-    setIsDataInitialized(true);
-  }, []);
-
-  useEffect(() => {
-    checkDateConditions();
-    const interval = setInterval(() => {
-      checkDateConditions();
-    }, 1000 * 60);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (isDataInitialized) {
-    checkIfAllGoalsCompleted();
-    saveGoals();
+      const interval = setInterval(() => {
+        checkDateConditions();
+      }, 30000);
+      return () => clearInterval(interval);
     }
-  }, [goals]);
+  }, [isDataInitialized]);
 
   useEffect(() => {
-    if (isDataInitialized) {
-    saveWinningStreak();
-    }
-  }, [winningStreak]);
-
-  useEffect(() => {
-    if (isDataInitialized) {
-      saveAllGoalsCompletedFlag();
-    }
-  }, [allGoalsCompletedFlag]);
-
-
-  const initData = async () => {
-    const data = await loadData();
-    setGoals(data?.storedGoals);
-    setWinningStreak(data?.winningStreak);
-    setAllGoalsCompletedFlag(Boolean(data?.allGoalsCompletedFlag));
-  };
-
-  const loadData = async () => {
-    try {
-      const storedGoals = await AsyncStorage.getItem('goals');
-      const storedWinningStreak = await AsyncStorage.getItem('winningStreak');
-
-      //first Start or Empty Data
-      if (!storedGoals || !storedWinningStreak) {
-        console.log('Erster Start der App oder leere Daten');
-        const defaultGoals: never[] = [];
-        const defaultWinningStreak = 0;
-        await AsyncStorage.setItem('goals', JSON.stringify(defaultGoals));
-        await AsyncStorage.setItem(
-          'winningStreak',
-          JSON.stringify(defaultWinningStreak),
-        );
-        await AsyncStorage.setItem(
-          'allGoalsCompletedFlag',
-          JSON.stringify(defaultAllGoalsCompletedFlag),
-        );
-
-        return {
-          storedGoals: defaultGoals,
-          winningStreak: defaultWinningStreak,
-          allGoalsCompletedFlag: defaultAllGoalsCompletedFlag,
-        };
+    const checkConditionsAndSave = async () => {
+      if (isDataInitialized) {
+        checkDateConditions();
+        checkGoalConditions();
+        await saveData();
+        setIsLoading(false);
       }
+    };
+    checkConditionsAndSave();
+  }, [goals, winningStreak, allGoalsCompletedFlag, isDataInitialized]);
 
-      if (storedGoals && storedWinningStreak && storedAllGoalsCompletedFlag) {
-        console.log(
-          'Daten erfolgreich geladen:',
-          storedGoals,
-          storedWinningStreak,
-          storedAllGoalsCompletedFlag,
-        );
-        const storedGoalsUnparsed = JSON.parse(storedGoals);
-        const storedWinningStreakUnparsed = JSON.parse(storedWinningStreak);
-        const storedAllGoalsCompletedFlagUnparsed = JSON.parse(
-          storedAllGoalsCompletedFlag,
-        );
+  const loadData = async (): Promise<any> => {
+    try {
+      const storedData = await AsyncStorage.multiGet(PERSISTANT_KEYS);
+      const dataFound = storedData.every(([key, value]) => value !== null);
 
-        return {
-          storedGoals: storedGoalsUnparsed,
-          winningStreak: storedWinningStreakUnparsed,
-          allGoalsCompletedFlag: storedAllGoalsCompletedFlagUnparsed,
+      if (!dataFound) {
+        console.log('Erster Start der App oder leere Daten');
+
+        const defaultValues: AppState = {
+          goals: [],
+          winningStreak: 0,
+          allGoalsCompletedFlag: false,
+          lastResetTimeStamp: DateTime.now().toMillis(),
         };
+        await AsyncStorage.multiSet(serializeObject(defaultValues));
+        console.log('Daten erfolgreich gespeichert!');
+
+        return defaultValues;
+      } else {
+        const loadedAppState: AppState = parseLoadedDataToAppState(
+          storedData as [string, string][],
+        );
+        console.log('Daten erfolgreich geladen:', loadedAppState);
+        return loadedAppState;
       }
     } catch (error) {
       console.error('Fehler beim Laden der Ziele aus AsyncStorage: ', error);
     }
   };
 
-  const saveGoals = async () => {
-    try {
-      await AsyncStorage.setItem('goals', JSON.stringify(goals));
-      console.log('Speichere Ziele:', goals);
-    } catch (error) {
-      console.error('Fehler beim Speichern der Ziele in AsyncStorage: ', error);
-    }
+  const serializeObject = (obj: {[s: string]: any}) => {
+    return Object.entries(obj).map(([key, value]) => [
+      key,
+      JSON.stringify(value),
+    ]) as [string, string][];
   };
 
-  const saveWinningStreak = async () => {
-    try {
-      await AsyncStorage.setItem(
-        'winningStreak',
-        JSON.stringify(winningStreak),
-      );
-      console.log('Speichere winningStreak: ', winningStreak);
-    } catch (error) {
-      console.error(
-        'Fehler beim Speichern der winningStreak in AsyncStorage: ',
-        error,
-      );
-    }
+  const parseLoadedDataToAppState = (
+    storedData: [string, string][],
+  ): AppState => {
+    return storedData.reduce((acc, [key, value]) => {
+      switch (key) {
+        case 'goals':
+          acc[key] = value ? (JSON.parse(value) as Goal[]) : [];
+          break;
+        case 'winningStreak':
+          acc[key] = value ? Number(value) : 0;
+          break;
+        case 'allGoalsCompletedFlag':
+          acc[key] = value === 'true';
+          break;
+        case 'lastResetTimeStamp':
+          acc[key] = value ? Number(value) : DateTime.now().toMillis();
+          break;
+      }
+      return acc;
+    }, {} as AppState);
   };
 
-  const saveAllGoalsCompletedFlag = async () => {
-    try {
-      await AsyncStorage.setItem(
-        'allGoalsCompletedFlag',
-        JSON.stringify(allGoalsCompletedFlag),
-      );
-      console.log('Speichere allGoalsCompletedFlag: ', allGoalsCompletedFlag);
-    } catch (error) {
-      console.error(
-        'Fehler beim Speichern der allGoalsCompletedFlag in AsyncStorage: ',
-        error,
-      );
-    }
-  };
+  const saveData = async () => {
+    const dataToSave: [string, string][] = [
+      ['goals', JSON.stringify(goals)],
+      ['winningStreak', JSON.stringify(winningStreak)],
+      ['allGoalsCompletedFlag', JSON.stringify(allGoalsCompletedFlag)],
+      ['lastResetTimeStamp', JSON.stringify(lastResetTimeStamp.toMillis())],
+    ];
 
-  const saveAllGoalsCompletedFlag = async () => {
     try {
-      await AsyncStorage.setItem(
-        'allGoalsCompletedFlag',
-        JSON.stringify(allGoalsCompletedFlag),
-      );
-      console.log('Speichere allGoalsCompletedFlag: ', allGoalsCompletedFlag);
+      await AsyncStorage.multiSet(dataToSave);
+      console.log('Daten erfolgreich gespeichert!');
     } catch (error) {
-      console.error(
-        'Fehler beim Speichern der allGoalsCompletedFlag in AsyncStorage: ',
-        error,
-      );
+      console.error('Fehler beim Speichern der Daten in AsyncStorage: ', error);
     }
   };
 
@@ -202,14 +183,11 @@ const App = () => {
     }
   };
 
-  const deleteGoal = (id: number) => {
-    setGoals(prevGoals => {
-      const updatedGoals = prevGoals.filter(goal => goal.id !== id);
-      return updatedGoals;
-    });
+  const deleteGoal = (id: number): void => {
+    setGoals(prevGoals => prevGoals.filter(goal => goal.id !== id));
   };
 
-  const decreaseCount = (id: number) => {
+  const decreaseCount = (id: number): void => {
     setGoals(prevGoals => {
       const updatedGoals = prevGoals.map(goal => {
         if (goal.id === id && goal.count > 0) {
@@ -226,78 +204,10 @@ const App = () => {
     });
   };
 
-  const checkDateConditions = (): void => {
-    const now = new Date();
-    const currentDay = now.getDay();
-    const currentHour = now.getHours();
-
-    if (currentDay === 1 && currentHour === 0 && !isResetAlreadyRunThisWeek) {
-      if (!allGoalsCompletedFlag) {
-        setWinningStreak(0);
-      }
-      const resetGoalsCount = goals.map(goal => ({
-        ...goal,
-        count: goal.originalCount,
-        finished: false,
-      }));
-      setGoals(resetGoalsCount);
-      setAllGoalsCompletedFlag(false);
-      setIsResetAlreadyRunThisWeek(true);
-    }
-
-    if (currentDay === 0) {
-      setDeactivateActionButtons(true);
-      setIsResetAlreadyRunThisWeek(false);
-    } else {
-      setDeactivateActionButtons(false);
-    }
-
-    calculateRemainingTimeTextAndProgressBar();
-  };
-
-  const calculateRemainingTimeTextAndProgressBar = (): void => {
-    //Condition for Mondays
-    const now = new Date();
-    const currentDay = now.getDay();
-    const nextMonday = new Date(now);
-    nextMonday.setHours(0, 0, 0, 0);
-    if (currentDay === 1) {
-      nextMonday.setDate(now.getDate() + 7);
-    } else {
-      nextMonday.setDate(now.getDate() + ((7 - currentDay + 1) % 7 || 7));
-    }
-
-    //RemainingTimeText
-    const remainingMilliseconds: number = nextMonday.getTime() - now.getTime();
-    const remainingDays: number = Math.floor(
-      remainingMilliseconds / (1000 * 60 * 60 * 24),
-    );
-    const remainingHours: number = Math.floor(
-      (remainingMilliseconds % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
-    );
-    const hourStringText = remainingHours === 1 ? 'Stunde' : 'Stunden';
-    const weekAlreadyCompleted = allGoalsCompletedFlag
-      ? 'entspannt zurücklehen!'
-      : 'fast geschafft';
-    const timeText =
-      remainingDays > 0
-        ? `${remainingDays} Tage, ${remainingHours} ${hourStringText}`
-        : `${weekAlreadyCompleted}`;
-    setTimeLeft(timeText);
-
-    //Progressbar
-    const totalMillisecondsInWeek: number = 7 * 24 * 60 * 60 * 1000;
-    const progressValue: number =
-      1 - remainingMilliseconds / totalMillisecondsInWeek;
-    setProgress(progressValue);
-  };
-
-  const checkIfAllGoalsCompleted = (): void => {
+  const checkGoalConditions = (): void => {
     const allCompleted = goals.every(goal => goal.finished);
-    console.log('checkIfAllGoalsCompleted', allGoalsCompletedFlag);
     if (allCompleted && goals.length > 0 && !allGoalsCompletedFlag) {
-      console.log('kommt echt in die Bedingung rein komischerweise');
-      setWinningStreak(winningStreak + 1);
+      setWinningStreak(prevWinningStreak => prevWinningStreak + 1);
       setAllGoalsCompletedFlag(true);
       setShowConfetti(true);
       setTimeout(() => {
@@ -306,13 +216,72 @@ const App = () => {
     }
   };
 
+  const checkDateConditions = (): void => {
+    const now = DateTime.now();
+    const currentWeekStart = now.startOf('week');
+
+    if (lastResetTimeStamp < currentWeekStart) {
+      if (!allGoalsCompletedFlag) {
+        setWinningStreak(0);
+      }
+      const resetGoalsCount: Goal[] = goals.map(goal => ({
+        ...goal,
+        count: goal.originalCount,
+        finished: false,
+      }));
+      setGoals(resetGoalsCount);
+      setAllGoalsCompletedFlag(false);
+      setLastResetTimeStamp(now);
+    }
+
+    if (now.weekday === 7) {
+      setDeactivateActionButtons(true);
+    } else {
+      setDeactivateActionButtons(false);
+    }
+    calculateRemainingTimeTextAndProgressBar();
+  };
+
+  const calculateRemainingTimeTextAndProgressBar = (): void => {
+    const now: Date = new Date();
+    const currentDay: number = now.getDay();
+    const nextMonday: Date = new Date(now);
+
+    nextMonday.setHours(0, 0, 0, 0);
+    if (currentDay === 1) {
+      nextMonday.setDate(now.getDate() + 7);
+    } else {
+      nextMonday.setDate(now.getDate() + ((7 - currentDay + 1) % 7 || 7));
+    }
+
+    const remainingHours: number =
+      (nextMonday.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const remainingDays: number = Math.floor(remainingHours / 24);
+    const remainingHoursInDays: number = Math.floor(remainingHours % 24);
+
+    const hourStringText = remainingHoursInDays === 1 ? 'Stunde' : 'Stunden';
+    const weekAlreadyCompleted = allGoalsCompletedFlag
+      ? 'entspannt zurücklehen!'
+      : 'fast geschafft';
+    const timeText =
+      remainingDays > 0
+        ? `${remainingDays} Tage, ${remainingHoursInDays} ${hourStringText}`
+        : `${weekAlreadyCompleted}`;
+
+    setTimeLeft(timeText);
+
+    const totalHoursInWeek: number = 7 * 24;
+    const progressValue: number = 1 - remainingHours / totalHoursInWeek;
+    setProgress(progressValue);
+  };
+
   const getRandomCongratsMessage = (): string => {
     if (winningStreak === 1) {
-      return 'Du hast das erste mal offiziell deine Wochenziele geschafft, weiter so!';
+      return 'Du hast deine Wochenziele erreicht!';
     }
 
     if (winningStreak === 2) {
-      return 'Zwei Mal hintereinander? Du bist auf dem richtigen Weg!';
+      return 'Zwei Mal hintereinander? Das könnte ein Run werden!';
     }
 
     const messages = [
@@ -375,98 +344,116 @@ const App = () => {
 
   return (
     <View style={styles.container}>
-      {/* Überschrift */}
-      <Text style={styles.heading}>
-        <Animated.Text style={styles.headingText}>
-          Weekly Goals 🎯
-        </Animated.Text>
-      </Text>
+      {isLoading ? (
+        <View style={styles.spinnerOverlay}>
+          {/* Lade Spinner */}
+          <ActivityIndicator size="large" color="white" />
+        </View>
+      ) : (
+        <View style={styles.mainSite}>
+          {/* Überschrift */}
+          <Text style={styles.heading}>
+            <Animated.Text style={styles.headingText}>
+              Weekly Goals 🎯
+            </Animated.Text>
+          </Text>
 
-      {/* Konfetti Animation */}
-      {showConfetti && (
-        <View style={styles.confetti}>
-          <ConfettiCannon count={200} origin={{x: width / 2, y: height / 2}} />
+          {/* Konfetti Animation */}
+          {showConfetti && (
+            <View style={styles.confetti}>
+              <ConfettiCannon
+                count={200}
+                origin={{x: width / 2, y: height / 2}}
+              />
+            </View>
+          )}
+          {showConfetti && (
+            <Animated.View style={styles.fadeText}>
+              <Text style={styles.congratsText}>
+                {getRandomCongratsMessage()}
+              </Text>
+            </Animated.View>
+          )}
+
+          {/* Action Button */}
+          {deactivateActionButtons ? (
+            <>
+              <Button
+                title={
+                  showActionButton ? 'ausblenden' : 'Neue Ziele hinzufügen'
+                }
+                color={showActionButton ? 'grey' : ''}
+                onPress={() => setShowActionButton(!showActionButton)}
+              />
+            </>
+          ) : (
+            <Text style={styles.actionButtonsDeactivatedText}>
+              Änderungen der Ziele nur Sonntags möglich.
+            </Text>
+          )}
+
+          {/* Eingabefelder für Hinzufügen */}
+          {showActionButton && deactivateActionButtons ? (
+            <>
+              <View style={styles.addDeleteContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ziel"
+                  placeholderTextColor="black"
+                  value={newGoalTitle}
+                  onChangeText={setNewGoalTitle}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Anzahl"
+                  placeholderTextColor="black"
+                  value={newGoalCount}
+                  onChangeText={setNewGoalCount}
+                  keyboardType="numeric"
+                />
+                <Button title="Ziel hinzufügen" onPress={addGoal} />
+              </View>
+            </>
+          ) : (
+            <Text />
+          )}
+
+          {/* Zielliste */}
+          <FlatList
+            data={goals}
+            renderItem={renderGoal}
+            keyExtractor={item => item.id.toString()}
+          />
+
+          {/* Winning Streak */}
+          <Text style={styles.winningStreakText}>
+            Winning streak:{' '}
+            <Text style={styles.winningStreakCount}>{winningStreak} </Text>
+            {winningStreak > 20 ? (
+              <Text>🤯</Text>
+            ) : winningStreak > 9 ? (
+              <Text>🚀</Text>
+            ) : winningStreak > 4 ? (
+              <Text>😲</Text>
+            ) : winningStreak > 1 ? (
+              <Text>✨</Text>
+            ) : (
+              <Text />
+            )}
+          </Text>
+
+          {/* Forschrittstext */}
+          <Text style={styles.progressText}>
+            Verbleibende Zeit bis zum Ende der Woche:
+          </Text>
+          <Text style={styles.timeText}>{timeLeft}</Text>
+
+          {/* Fortschrittsbalken */}
+          <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBar, {width: `${progress * 100}%`}]} />
+          </View>
         </View>
       )}
-      {showConfetti && (
-        <Animated.View style={styles.fadeText}>
-          <Text style={styles.congratsText}>{getRandomCongratsMessage()}</Text>
-        </Animated.View>
-      )}
-
-      {/* Action Button */}
-      {deactivateActionButtons ? (
-        <>
-          <Button
-            title={showActionButton ? 'ausblenden' : 'Neue Ziele hinzufügen'}
-            color={showActionButton ? 'grey' : ''}
-            onPress={() => setShowActionButton(!showActionButton)}
-          />
-        </>
-      ) : (
-        <Text style={styles.actionButtonsDeactivatedText}>
-          Änderungen der Ziele nur Sonntags möglich.
-        </Text>
-      )}
-
-      {/* Eingabefelder für Hinzufügen */}
-      {showActionButton && deactivateActionButtons ? (
-        <>
-          <View style={styles.addDeleteContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Ziel"
-              placeholderTextColor="black"
-              value={newGoalTitle}
-              onChangeText={setNewGoalTitle}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Anzahl"
-              placeholderTextColor="black"
-              value={newGoalCount}
-              onChangeText={setNewGoalCount}
-              keyboardType="numeric"
-            />
-            <Button title="Ziel hinzufügen" onPress={addGoal} />
-          </View>
-        </>
-      ) : (
-        <Text />
-      )}
-
-      {/* Zielliste */}
-      <FlatList
-        data={goals}
-        renderItem={renderGoal}
-        keyExtractor={item => item.id.toString()}
-      />
-
-      {/* Winning Streak */}
-      <Text style={styles.winningStreakText}>
-        Winning streak:{' '}
-        <Text style={styles.winningStreakCount}>{winningStreak} </Text>
-        {winningStreak > 9 ? (
-          <Text>🚀</Text>
-        ) : winningStreak > 4 ? (
-          <Text>😲</Text>
-        ) : winningStreak > 1 ? (
-          <Text>✨</Text>
-        ) : (
-          <Text />
-        )}
-      </Text>
-
-      {/* Forschrittstext */}
-      <Text style={styles.progressText}>
-        Verbleibende Zeit bis zum Ende der Woche:
-      </Text>
-      <Text style={styles.timeText}>{timeLeft}</Text>
-
-      {/* Fortschrittsbalken */}
-      <View style={styles.progressBarContainer}>
-        <View style={[styles.progressBar, {width: `${progress * 100}%`}]} />
-      </View>
     </View>
   );
 };
@@ -474,8 +461,21 @@ const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     backgroundColor: '#f0f0f0',
+  },
+  spinnerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainSite: {
+    flex: 1,
+    padding: 20,
   },
   heading: {
     fontWeight: 'bold',
