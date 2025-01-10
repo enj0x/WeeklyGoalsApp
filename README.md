@@ -1,54 +1,41 @@
-## About the app
+# Weekly Goals App
 
-## This is a React native App for tracking your weekly goals.
+### This is a React native App (tested just for android) for tracking your weekly goals and to keep you motivated.
 
-### Compatible for android, ios and web.
-
-### Features:
+## Features:
 
 - add and delete goals (Can only be changed on sundays)
 - timeline with progressbar
-- random congrats messages when all goals finished during the week
+- winningStreak with different levels
+- 10 different congrats messages when goals completed with different levels
 
-## Step 1: Start the Metro Server
+## Build and Install the Application
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
-
-To start Metro, run the following command from the _root_ of your React Native project:
+You can install the app with:
 
 ```bash
 # using npm
-npm start
+cd android
+./gradlew assembleRelease
+adb install android/app/build/outputs/apk/release/app-release.apk
 
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Start your Application
+## Start your Application for testing purposes
 
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
-
-### For Android
+Node and Android Studio have to be installed. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ app:
 
 ```bash
 # using npm
+npm i
 npx react-native run-android
-
-# OR using Yarn
-yarn android
 ```
 
-### For iOS
+## Preview
 
-```bash
-# using npm
-npm run ios
+<img src="./assets/screenshot.png" alt="Screenshot" width="325" height="700">
 
-# OR using Yarn
-yarn ios
-```
-
-# Learn More
+## Learn More
 
 To learn more about React Native, take a look at the following resources:
 
