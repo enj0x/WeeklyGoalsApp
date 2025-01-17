@@ -231,7 +231,6 @@ const App = () => {
       }));
       setGoals(resetGoalsCount);
       setAllGoalsCompletedFlag(false);
-      setLastResetTimeStamp(now);
     }
 
     if (now.weekday === 7) {
@@ -239,6 +238,7 @@ const App = () => {
     } else {
       setDeactivateActionButtons(false);
     }
+    setLastResetTimeStamp(now);
     calculateRemainingTimeTextAndProgressBar();
   };
 
@@ -260,12 +260,13 @@ const App = () => {
     const remainingHoursInDays: number = Math.floor(remainingHours % 24);
 
     const hourStringText = remainingHoursInDays === 1 ? 'Stunde' : 'Stunden';
+    const daysStringText = remainingDays === 1 ? 'Tag' : 'Tage';
     const weekAlreadyCompleted = allGoalsCompletedFlag
       ? 'entspannt zurücklehen!'
       : 'fast geschafft';
     const timeText =
       remainingDays > 0
-        ? `${remainingDays} Tage, ${remainingHoursInDays} ${hourStringText}`
+        ? `${remainingDays} ${daysStringText} ${remainingHoursInDays} ${hourStringText}`
         : `${weekAlreadyCompleted}`;
 
     setTimeLeft(timeText);
@@ -296,9 +297,7 @@ const App = () => {
       `Der ${winningStreak}. Erfolg hintereinander - das Gefühl, seine eigenen Versprechen einzuhalten, ist unbezahlbar.`,
       `Zum ${winningStreak}. Mal alles erledigt: Es ist nicht nur ein Sieg über die Aufgaben, sondern auch über die Zweifel in dir.`,
     ];
-
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    return randomMessage;
+    return messages[Math.floor(Math.random() * messages.length)];
   };
 
   const triggerAnimation = () => {
