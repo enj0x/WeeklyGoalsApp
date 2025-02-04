@@ -1,13 +1,13 @@
 # Weekly Goals App
 
-### This is a React native App (tested just for android) for tracking your weekly goals and to keep you motivated.
+### This is a React native App for tracking your weekly goals and to keep you motivated.
 
 ## Features:
 
-- add and delete goals (Can only be changed on sundays)
+- add and delete goals (Can only be changed on sundays for more commitment)
 - timeline with progressbar
 - winningStreak with different levels
-- 10 different congrats messages when goals completed with different levels
+- 13 different congrats messages when goals completed in different levels
 
 ## Build and Install the Application
 
